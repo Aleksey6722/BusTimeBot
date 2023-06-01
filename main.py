@@ -44,18 +44,18 @@ def tram(callback):
 
 @bot.callback_query_handler(func=lambda callback: True)
 def get_buses(callback):
+    a_list = []
     for id in callback.data.split(','):
         resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": id})
-        a = resp.text
-        obj = json.dump(resp.text)
-        result = []
-        result.append(resp.text)
-        for raw in resp.text.split('\n')[:-1]:
-            obj = json.loads(raw)
-            print(obj['result'])
-            print(type(obj))
+        for row in resp.text.split('\n')[:-1]:
+            obj = json.loads(row)
+            number = obj.get('result').get('Number')
+            destination = obj.get('result').get('EndStop')
+            time = obj.get('result').get('InfoM')[0]
+            a_list.append((number, destination, str(time)+' мин'))
 
-    bot.send_message(callback.message.chat.id, result)
+    print(a_list)
+    bot.send_message(callback.message.chat.id, str(a_list))
 
 
 bot.polling(none_stop=True)
