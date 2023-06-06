@@ -3,6 +3,8 @@ from telebot import types
 import requests
 import json
 
+from models import session, Region
+
 bot = telebot.TeleBot('5865105516:AAGLxWHqTXwH2rBABDNx3xqw969LW_boFqA')
 message_choose_transport = 'Выберите транспорт'
 message_choose_busstop = 'Выберите автобусную остановку'
@@ -29,10 +31,10 @@ def start(message):
 @bot.callback_query_handler(func=lambda callback: callback.data == 'region')
 def bus(callback):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Аблакетка', callback_data='0'))
-    markup.add(types.InlineKeyboardButton('Пристань', callback_data='1'))
-    markup.add(types.InlineKeyboardButton('Посёлок Красина', callback_data='2'))
-    markup.add(types.InlineKeyboardButton('Центральный рынок', callback_data='3'))
+    markup.add(types.InlineKeyboardButton('Аблакетка', callback_data='ablaketka'))
+    markup.add(types.InlineKeyboardButton('Пристань', callback_data='pristan'))
+    markup.add(types.InlineKeyboardButton('Посёлок Красина', callback_data='krasina'))
+    markup.add(types.InlineKeyboardButton('Центральный рынок', callback_data='rynok_centr'))
 
     bot.send_message(callback.message.chat.id, message_choose_region, reply_markup=markup)
 
@@ -48,6 +50,18 @@ def tram(callback):
     bot.send_message(callback.message.chat.id, message_choose_tramstop, reply_markup=markup)
 
 
+def sum_duplicates(sorted_list):
+    a_list = []
+    i = 0
+    for item in sorted_list:
+        if len(a_list) > 0 and item[1] == a_list[i - 1][1]:
+            a_list[i - 1][0] = a_list[i - 1][0] + ',' + item[0]
+            continue
+        a_list.append(item)
+        i += 1
+    return a_list
+
+
 def sort_function(elem):
     if elem[0].isdigit():
         return int(elem[0])
@@ -56,18 +70,12 @@ def sort_function(elem):
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_region)
 def get_busstops(callback):
-    def sum_duplicates(sorted_list):
-        a_list = []
-        i = 0
-        for item in sorted_list:
-            if len(a_list) > 0 and item[1] == a_list[i - 1][1]:
-                a_list[i - 1][0] = a_list[i - 1][0] + ',' + item[0]
-                continue
-            a_list.append(item)
-            i += 1
-        return a_list
-
-    resp = requests.post('https://oskemenbus.kz/api/GetStops', json=regions[int(callback.data)])
+    data = session.query(Region).filter(Region.name == callback.data).first()
+    data_to_send = {
+        'Point1': {'Latitude': data.latitude1, 'Longitude': data.longitude1},
+        'Point2': {'Latitude': data.latitude2, 'Longitude': data.longitude2}
+    }
+    resp = requests.post('https://oskemenbus.kz/api/GetStops', json=data_to_send)
     a_list = []
     for row in resp.text.split('\n')[:-1]:
         obj = json.loads(row)
@@ -82,9 +90,16 @@ def get_busstops(callback):
         markup.add(types.InlineKeyboardButton(item[1], callback_data=item[0]))
     bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
 
+
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
                             message_choose_busstop or message_choose_tramstop or 'Обновить')
 def get_buses(callback):
+    markup = types.InlineKeyboardMarkup()
+    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
+    btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
+    markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
+    markup.add(btn1, btn2)
+
     a_list = []
     for id in callback.data.split(','):
         resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": id})
@@ -96,13 +111,11 @@ def get_buses(callback):
             time = time_from_server if time_from_server > 0 else '<1'
             a_list.append((number, destination, str(time)+'мин'))
 
+    if len(a_list) == 0:
+        bot.send_message(callback.message.chat.id, 'Нет ни одного автобуса/трамвая', reply_markup=markup)
+        return
+
     a_list.sort(key=sort_function)
-    markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
-    btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
-    markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
-    t = callback.data
-    markup.add(btn1, btn2)
     result = 'номер (направление) время \n\n' # Сделать отображение названия остановки из будущей БД
     for elem in a_list:
         result += f'  {elem[0]}   ({elem[1]})   {elem[2]}\n'
