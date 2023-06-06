@@ -7,28 +7,34 @@ bot = telebot.TeleBot('5865105516:AAGLxWHqTXwH2rBABDNx3xqw969LW_boFqA')
 message_choose_transport = 'Выберите транспорт'
 message_choose_busstop = 'Выберите автобусную остановку'
 message_choose_tramstop = 'Выберите трамвайную остановку'
+message_choose_region = 'Выберите район'
+
+regions = [
+    {'Point1': {'Latitude': 49.935127, 'Longitude': 82.666678}, 'Point2': {'Latitude': 49.89085, 'Longitude': 82.718598}},
+    {'Point1': {'Latitude': 49.950912, 'Longitude': 82.643208}, 'Point2': {'Latitude': 49.941789, 'Longitude':  82.657945}},
+    {'Point1': {'Latitude': 49.951872, 'Longitude': 82.659318}, 'Point2': {'Latitude': 49.941294, 'Longitude':  82.675867}},
+    {'Point1': {'Latitude': 49.962677, 'Longitude': 82.62226}, 'Point2': {'Latitude': 49.947134, 'Longitude':  82.64557}},
+]
 
 
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='buses')
+    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(btn1, btn2)
-    bot.send_message(message.chat.id, message_choose_tramstop, reply_markup=markup)
+    bot.send_message(message.chat.id, message_choose_transport, reply_markup=markup)
 
 
-@bot.callback_query_handler(func=lambda callback: callback.data == 'buses')
+@bot.callback_query_handler(func=lambda callback: callback.data == 'region')
 def bus(callback):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Мир', callback_data='16385,51201'))
-    markup.add(types.InlineKeyboardButton('Казахстан', callback_data='44033,23553,667649'))
-    markup.add(types.InlineKeyboardButton('Дворец спорта', callback_data='20481,47105'))
-    markup.add(types.InlineKeyboardButton('Автовокзал', callback_data='152577,151553'))
-    markup.add(types.InlineKeyboardButton('Конденсаторный завод', callback_data='334849,336897'))
-    markup.add(types.InlineKeyboardButton('Т/ц Евразия', callback_data='62465,'))
-    markup.add(types.InlineKeyboardButton('Рынок', callback_data='17409,50177'))
-    bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
+    markup.add(types.InlineKeyboardButton('Аблакетка', callback_data='0'))
+    markup.add(types.InlineKeyboardButton('Пристань', callback_data='1'))
+    markup.add(types.InlineKeyboardButton('Посёлок Красина', callback_data='2'))
+    markup.add(types.InlineKeyboardButton('Центральный рынок', callback_data='3'))
+
+    bot.send_message(callback.message.chat.id, message_choose_region, reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda callback: callback.data == 'trams')
@@ -48,6 +54,34 @@ def sort_function(elem):
     return int(elem[0][:-1])
 
 
+@bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_region)
+def get_busstops(callback):
+    def sum_duplicates(sorted_list):
+        a_list = []
+        i = 0
+        for item in sorted_list:
+            if len(a_list) > 0 and item[1] == a_list[i - 1][1]:
+                a_list[i - 1][0] = a_list[i - 1][0] + ',' + item[0]
+                continue
+            a_list.append(item)
+            i += 1
+        return a_list
+
+    resp = requests.post('https://oskemenbus.kz/api/GetStops', json=regions[int(callback.data)])
+    a_list = []
+    for row in resp.text.split('\n')[:-1]:
+        obj = json.loads(row)
+        name = obj.get('result').get('StopName')
+        stop_id = obj.get('result').get('StopId')
+        a_list.append([stop_id, name.strip()])
+
+    a_list.sort(key=lambda x: x[1])
+    stops_list = sum_duplicates(a_list)
+    markup = types.InlineKeyboardMarkup()
+    for item in stops_list:
+        markup.add(types.InlineKeyboardButton(item[1], callback_data=item[0]))
+    bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
+
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
                             message_choose_busstop or message_choose_tramstop or 'Обновить')
 def get_buses(callback):
@@ -64,7 +98,7 @@ def get_buses(callback):
 
     a_list.sort(key=sort_function)
     markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='buses')
+    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     t = callback.data
@@ -75,4 +109,4 @@ def get_buses(callback):
     bot.send_message(callback.message.chat.id, result, reply_markup=markup)
 
 
-bot.polling(none_stop=True)
+bot.infinity_polling()
