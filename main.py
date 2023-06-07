@@ -46,7 +46,7 @@ def tram(callback):
     markup.add(types.InlineKeyboardButton('Рынок', callback_data='143361,144385'))
     markup.add(types.InlineKeyboardButton('Дворец спорта', callback_data='543745,544769'))
     markup.add(types.InlineKeyboardButton('Дом связи (Больничный комплекс)', callback_data='156673,590849'))
-    markup.add(types.InlineKeyboardButton('Смирнова', callback_data='562177pip,561153'))
+    markup.add(types.InlineKeyboardButton('Смирнова', callback_data='562177,561153'))
     bot.send_message(callback.message.chat.id, message_choose_tramstop, reply_markup=markup)
 
 
@@ -116,7 +116,7 @@ def get_buses(callback):
         return
 
     a_list.sort(key=sort_function)
-    result = 'номер (направление) время \n\n' # Сделать отображение названия остановки из будущей БД
+    result = 'номер (направление) время \n\n'  # Сделать отображение названия остановки из будущей БД
     for elem in a_list:
         result += f'  {elem[0]}   ({elem[1]})   {elem[2]}\n'
     bot.send_message(callback.message.chat.id, result, reply_markup=markup)

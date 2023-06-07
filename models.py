@@ -17,5 +17,11 @@ class Region(Base):
     name = Column(String(100), nullable=False)
 
 
+class TramStop(Base):
+    __tablename__ = 'tramstop'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64), nullable=False)
+
+
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
