@@ -21,7 +21,7 @@ def sum_duplicates(sorted_list):
             continue
         a_list.append(item)
         i += 1
-    return a_list
+    return list(map(lambda x: ','.join(x), a_list))
 
 
 def sort_function(elem):
@@ -33,13 +33,13 @@ def sort_function(elem):
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
+    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(btn1, btn2)
     bot.send_message(message.chat.id, message_choose_transport, reply_markup=markup)
 
 
-@bot.callback_query_handler(func=lambda callback: callback.data == 'region')
+@bot.callback_query_handler(func=lambda callback: callback.data == 'bus_region')
 def bus(callback):
     data = session.query(Region).all()
     markup = types.InlineKeyboardMarkup()
@@ -57,14 +57,16 @@ def tram(callback):
         a_list.append([elem.name.strip(), str(elem.id)])
     stop_list = sum_duplicates(a_list)
     markup = types.InlineKeyboardMarkup()
-    for i in stop_list:
-        markup.add(types.InlineKeyboardButton(i[0], callback_data=i[1]))
+    for item in stop_list:
+        name = item.split(',')[0]
+        markup.add(types.InlineKeyboardButton(name, callback_data=item))
     bot.send_message(callback.message.chat.id, message_choose_tramstop, reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_region)
 def get_busstops(callback):
     data = session.query(Region).filter(Region.name == callback.data).first()
+    tram_stops_id = [x[0] for x in session.query(TramStop.id).all()]
     data_to_send = {
         'Point1': {'Latitude': data.latitude1, 'Longitude': data.longitude1},
         'Point2': {'Latitude': data.latitude2, 'Longitude': data.longitude2}
@@ -75,26 +77,40 @@ def get_busstops(callback):
         obj = json.loads(row)
         name = obj.get('result').get('StopName')
         stop_id = obj.get('result').get('StopId')
-        a_list.append([name.strip(), stop_id])
+        if stop_id not in tram_stops_id:
+            a_list.append([name.strip(), stop_id])
 
     a_list.sort(key=lambda x: x[0])
     stops_list = sum_duplicates(a_list)
     markup = types.InlineKeyboardMarkup()
+    i = 0
     for item in stops_list:
-        markup.add(types.InlineKeyboardButton(item[0], callback_data=','.join(item)))
+        name = item.split(',')[0]
+        ids = item.split(',')[1:]
+        print(item)
+        print(type(item))
+        markup.add(types.InlineKeyboardButton(name, callback_data=','.join(ids)))
     bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
+
+
+def func(x, callback=None):
+    var = x[0].callback_data == callback.data
+    return var
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
                             message_choose_busstop or message_choose_tramstop or 'Обновить')
 def get_buses(callback):
+    for i in callback.message.reply_markup.keyboard:
+        if i[0].callback_data == callback.data:
+            name = i[0].text
+            break
     markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='region')
+    btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     markup.add(btn1, btn2)
-    name = callback.data.split(',')[0]
-    id = callback.data.split(',')[1:]
+    id = callback.data.split(',')
     a_list = []
     for elem in id:
         resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": elem})
@@ -111,7 +127,7 @@ def get_buses(callback):
         return
 
     a_list.sort(key=sort_function)
-    result = f'Остановка: {name}\n\nНомер (направление) время \n\n'  # Сделать отображение названия остановки из будущей БД
+    result = f'Остановка: {name}\n\nНомер (направление) время \n\n'
     for elem in a_list:
         result += f' {elem[0]}   ({elem[1]})   {elem[2]}\n'
     bot.send_message(callback.message.chat.id, result, reply_markup=markup)
