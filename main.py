@@ -1,16 +1,23 @@
 import telebot
 from telebot import types
 import requests
+import schedule
+
 import json
+import os
+
 
 from models import session, Region, TramStop
 
-bot = telebot.TeleBot('5865105516:AAGLxWHqTXwH2rBABDNx3xqw969LW_boFqA')
+TOKEN = os.getenv('TOKEN')
+bot = telebot.TeleBot(TOKEN)
 message_choose_transport = 'Выберите транспорт'
 message_choose_busstop = 'Выберите автобусную остановку'
 message_choose_tramstop = 'Выберите трамвайную остановку'
 message_choose_region = 'Выберите район'
-
+message_choose_day_of_week = 'Выберите день недели'
+DAYS = {'monday': 'Понедельник', 'tuesday': 'Вторник', 'wednesday': 'Среда', 'thursday': 'Четверг',
+            'friday': 'Пятница', 'saturday': 'Суббота', 'sunday': 'Воскресенье', 'everyday': 'Каждый день'}
 
 def sum_duplicates(sorted_list):
     a_list = []
@@ -30,12 +37,26 @@ def sort_function(elem):
     return int(elem[0][:-1])
 
 
+def get_scoreboard(ids):
+    a_list = []
+    for elem in ids:
+        resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": elem})
+        for row in resp.text.split('\n')[:-1]:
+            obj = json.loads(row)
+            number = obj.get('result').get('Number')
+            destination = obj.get('result').get('EndStop')
+            time_from_server = obj.get('result').get('InfoM')[0]
+            time = time_from_server if time_from_server > 0 else '<1'
+            a_list.append((number, destination, str(time) + 'мин'))
+    return a_list
+
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(btn1, btn2)
+    g = os.getenv('TOKEN')
     bot.send_message(message.chat.id, message_choose_transport, reply_markup=markup)
 
 
@@ -93,42 +114,52 @@ def get_busstops(callback):
     bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
 
 
-def func(x, callback=None):
-    var = x[0].callback_data == callback.data
-    return var
+@bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] == 'notice')
+def choose_day(callback):
+    markup = types.InlineKeyboardMarkup()
+    data = ','.join(callback.data.split(',')[1:])
+    for day, name in DAYS.items():
+        markup.add(types.InlineKeyboardButton(f"{name}", callback_data=f'{day},{data}'))
+    bot.send_message(callback.message.chat.id, message_choose_day_of_week, reply_markup=markup)
 
+
+@bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] in DAYS.keys())
+def set_time(callback):
+    pass
+
+name = ''
+id = ''
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
-                            message_choose_busstop or message_choose_tramstop or 'Обновить')
+                                                  (message_choose_busstop or message_choose_tramstop) or
+                                                  callback.message.reply_markup.keyboard[1][0].text == 'Обновить')
 def get_buses(callback):
-    for i in callback.message.reply_markup.keyboard:
-        if i[0].callback_data == callback.data:
-            name = i[0].text
-            break
+    if callback.message.reply_markup.keyboard[1][0].text == 'Обновить':
+        global name, id
+
+    else:
+        for i in callback.message.reply_markup.keyboard:
+            if i[0].callback_data == callback.data:
+                global name
+                name = i[0].text
+                break
+        global id
+        id = callback.data.split(',')
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
+    markup.add(types.InlineKeyboardButton('Установить уведомление', callback_data='notice,'+callback.data))
     markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     markup.add(btn1, btn2)
-    id = callback.data.split(',')
-    a_list = []
-    for elem in id:
-        resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": elem})
-        for row in resp.text.split('\n')[:-1]:
-            obj = json.loads(row)
-            number = obj.get('result').get('Number')
-            destination = obj.get('result').get('EndStop')
-            time_from_server = obj.get('result').get('InfoM')[0]
-            time = time_from_server if time_from_server > 0 else '<1'
-            a_list.append((number, destination, str(time)+'мин'))
-
-    if len(a_list) == 0:
-        bot.send_message(callback.message.chat.id, 'Нет ни одного автобуса/трамвая', reply_markup=markup)
+    list_of_buses = get_scoreboard(id)
+    if len(list_of_buses) == 0:
+        bot.send_message(callback.message.chat.id, f'На остановке {name} нет ни одного автобуса/трамвая',
+                         reply_markup=markup)
         return
 
-    a_list.sort(key=sort_function)
+    list_of_buses.sort(key=sort_function)
     result = f'Остановка: {name}\n\nНомер (направление) время \n\n'
-    for elem in a_list:
+    for elem in list_of_buses:
         result += f' {elem[0]}   ({elem[1]})   {elem[2]}\n'
     bot.send_message(callback.message.chat.id, result, reply_markup=markup)
 
