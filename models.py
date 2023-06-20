@@ -23,5 +23,11 @@ class TramStop(Base):
     name = Column(String(64), nullable=False)
 
 
+class Button(Base):
+    __tablename__ = 'button'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(64), nullable=False)
+    data = Column(String(256), nullable=False)
+
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
