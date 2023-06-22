@@ -20,8 +20,10 @@ message_choose_busstop = 'Выберите автобусную остановк
 message_choose_tramstop = 'Выберите трамвайную остановку'
 message_choose_region = 'Выберите район'
 message_choose_day_of_week = 'Выберите день недели'
-DAYS = {'monday': 'Понедельник', 'tuesday': 'Вторник', 'wednesday': 'Среда', 'thursday': 'Четверг',
-            'friday': 'Пятница', 'saturday': 'Суббота', 'sunday': 'Воскресенье', 'everyday': 'Каждый день'}
+message_choose_number_of_vehicle = 'Выберите номер транспорта'
+message_set_time = 'Введите время уведомления в 24-х часовом формате ЧЧ:ММ'
+DAYS = {'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда', 'Thursday': 'Четверг',
+            'Friday': 'Пятница', 'Saturday': 'Суббота', 'Sunday': 'Воскресенье', 'Everyday': 'Каждый день'}
 
 
 def sum_duplicates(sorted_list):
@@ -57,6 +59,7 @@ def get_scoreboard(ids):
 
 
 def generate_callback(data):
+    session.query(Button).filter(Button.date < time.time()-60*60*24).delete()
     key = str(uuid.uuid4())
     new_button = Button(key=key, data=data)
     session.add(new_button)
@@ -130,36 +133,63 @@ def get_busstops(callback):
 
 
 @bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] == 'notice')
+def choose_vehicle(callback):
+    markup = types.InlineKeyboardMarkup(row_width=5)
+    list_of_buttons = []
+    key = callback.data.split(',')[-1]
+    data = get_callback_by_id(key).split(',')[1:]
+    routs = set()
+    for id in data:
+        resp = requests.post('https://oskemenbus.kz/api/GetStopRouts', json={"StopId": id})
+        for row in resp.text.split('\n')[:-1]:
+            row = json.loads(row)
+            number = row.get('result').get('Number')
+            routs.add(number)
+            if len(list_of_buttons) == 0:
+                callback_data = get_callback_by_id(callback.data.split(',')[-1])
+                key = generate_callback(callback_data+','+number)
+                list_of_buttons.append(types.InlineKeyboardButton(number, callback_data=key))
+            elif number not in [x.text for x in list_of_buttons]:
+                key = generate_callback(callback_data + ',' + number)
+                list_of_buttons.append(types.InlineKeyboardButton(number, callback_data=key))
+    markup.add(*list_of_buttons)
+    bot.send_message(callback.message.chat.id, message_choose_number_of_vehicle, reply_markup=markup)
+    print(markup.keyboard)
+
+@bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_number_of_vehicle)
 def choose_day(callback):
     markup = types.InlineKeyboardMarkup()
-    key = callback.data.split(',')[-1]
+    data = get_callback_by_id(callback.data)
     for day, name in DAYS.items():
-        markup.add(types.InlineKeyboardButton(f"{name}", callback_data=f'{day},{key}'))
+        key = generate_callback(data+','+day)
+        markup.add(types.InlineKeyboardButton(f"{name}", callback_data=key))
     bot.send_message(callback.message.chat.id, message_choose_day_of_week, reply_markup=markup)
 
 
-@bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] in DAYS.keys())
-def set_time(callback):
-    pass
+@bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_day_of_week)
+def choose_time(callback):
+    data = get_callback_by_id(callback.data)
+    bot.send_message(callback.message.chat.id, message_set_time,)
+    bot.register_next_step_handler(callback.message, callback=check_time, key=callback.data)
+
+def check_time(call, key):
+    text = call.text
+    data = get_callback_by_id(key)
+    v = 0
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
                                                   (message_choose_busstop or message_choose_tramstop) or
-                                                  callback.data.split(',')[0] == 'refresh')
-def get_buses(callback):
-    if callback.data.split(',')[0] == 'refresh':
-        data = get_callback_by_id(callback.data.split(',')[1])
-        name = data.split(',')[0]
-        id = data.split(',')[1:]
-    else:
-        data = get_callback_by_id(callback.data)
-        name = data.split(',')[0]
-        id = data.split(',')[1:]
+                                                  callback.message.reply_markup.keyboard[1][0].text == 'Обновить')
+def get_vehicle(callback):
+    data = get_callback_by_id(callback.data)
+    name = data.split(',')[0]
+    id = data.split(',')[1:]
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(types.InlineKeyboardButton('Установить уведомление', callback_data='notice,'+callback.data))
-    markup.add(types.InlineKeyboardButton('Обновить', callback_data='refresh,'+callback.data))
+    markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     markup.add(btn1, btn2)
     list_of_buses = get_scoreboard(id)
     if len(list_of_buses) == 0:
@@ -182,7 +212,6 @@ def check_notify():
         c += 1
         print(datetime.today().strftime('%A'))
         print(datetime.today().strftime('%H:%M'))
-
 
 
 notifier = Thread(target=check_notify)

@@ -1,5 +1,6 @@
-from sqlalchemy import create_engine, String, Integer, Float, Column
+from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger
 from sqlalchemy.orm import Session, declarative_base
+import time
 
 
 engine = create_engine("postgresql+psycopg2://postgres:sql123@localhost/busbot")
@@ -28,6 +29,8 @@ class Button(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String(64), nullable=False)
     data = Column(String(256), nullable=False)
+    date = Column(Integer, default=int(time.time()))
+
 
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
