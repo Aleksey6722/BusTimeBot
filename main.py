@@ -1,7 +1,6 @@
 import telebot
 from telebot import types
 import requests
-import schedule
 
 import json
 import os
@@ -9,7 +8,7 @@ import time
 from datetime import datetime
 from threading import Thread
 import uuid
-
+import re
 
 from models import session, Region, TramStop, Button
 
@@ -125,7 +124,6 @@ def get_busstops(callback):
     a_list.sort(key=lambda x: x[0])
     stops_list = sum_duplicates(a_list)
     markup = types.InlineKeyboardMarkup()
-    i = 0
     for item in stops_list:
         name = item.split(',')[0]
         markup.add(types.InlineKeyboardButton(name, callback_data=generate_callback(item)))
@@ -170,12 +168,23 @@ def choose_day(callback):
 def choose_time(callback):
     data = get_callback_by_id(callback.data)
     bot.send_message(callback.message.chat.id, message_set_time,)
-    bot.register_next_step_handler(callback.message, callback=check_time, key=callback.data)
+    bot.register_next_step_handler(callback.message, callback=check_time, call=callback)
 
-def check_time(call, key):
-    text = call.text
-    data = get_callback_by_id(key)
-    v = 0
+
+re_time = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
+
+
+def check_time(message, call):
+    text = message.text
+    data = get_callback_by_id(call.data)
+    if re.fullmatch(re_time, text):
+        # создание записи в БД
+        bot.send_message(message.chat.id, 'Уведомление создано! Для управления уведомлениями '
+                                       'введите команду /my_notice')
+        return
+    bot.send_message(message.chat.id, 'Некорректное время')
+    choose_time(call)
+
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
@@ -207,7 +216,7 @@ def get_vehicle(callback):
 def check_notify():
     c = 0
     while True:
-        time.sleep(60)
+        time.sleep(30)
         print(c)
         c += 1
         print(datetime.today().strftime('%A'))
