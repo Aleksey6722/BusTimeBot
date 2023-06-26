@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger
+from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger, func, DateTime
 from sqlalchemy.orm import Session, declarative_base
 import time
 
@@ -28,8 +28,11 @@ class Button(Base):
     __tablename__ = 'button'
     id = Column(Integer, primary_key=True)
     key = Column(String(64), nullable=False)
-    data = Column(String(256), nullable=False)
-    date = Column(Integer, default=int(time.time()))
+    name = Column(String(64), nullable=False)
+    stop_id = Column(String(256), nullable=False)
+    bus_number = Column(String(64), nullable=True)
+    day = Column(String(10), nullable=True)
+    date = Column(DateTime(), server_default=func.now())
 
 
 if __name__ == '__main__':

@@ -30,7 +30,7 @@ def sum_duplicates(sorted_list):
     i = 0
     for item in sorted_list:
         if len(a_list) > 0 and item[0] == a_list[i - 1][0]:
-            a_list[i - 1][1] = a_list[i - 1][1] + ',' + item[1]
+            a_list[i - 1][1] = a_list[i - 1][1] + '-' + item[1]
             continue
         a_list.append(item)
         i += 1
@@ -57,18 +57,23 @@ def get_scoreboard(ids):
     return a_list
 
 
-def generate_callback(data):
-    session.query(Button).filter(Button.date < time.time()-60*60*24).delete()
+def generate_callback(**kwargs):
+    fixed_time = time.time()-60*60*24
+    session.query(Button).filter(Button.date < datetime.fromtimestamp(fixed_time)).delete()
     key = str(uuid.uuid4())
-    new_button = Button(key=key, data=data)
-    session.add(new_button)
-    session.commit()
-    return key
+    new_button = Button(key=key, **kwargs)
+    try:
+        session.add(new_button)
+        session.commit()
+        return key
+    except Exception as e:
+        print('Ошибка создания кнопки, неверные данные')
+        print(e)
 
 
 def get_callback_by_id(key):
     data = session.query(Button).filter(Button.key == key).first()
-    return data.data
+    return data
 
 
 @bot.message_handler(commands=['start'])
@@ -126,7 +131,8 @@ def get_busstops(callback):
     markup = types.InlineKeyboardMarkup()
     for item in stops_list:
         name = item.split(',')[0]
-        markup.add(types.InlineKeyboardButton(name, callback_data=generate_callback(item)))
+        stop_id = item.split(',')[1]
+        markup.add(types.InlineKeyboardButton(name, callback_data=generate_callback(name=name, stop_id=stop_id)))
     bot.send_message(callback.message.chat.id, message_choose_busstop, reply_markup=markup)
 
 
@@ -135,20 +141,18 @@ def choose_vehicle(callback):
     markup = types.InlineKeyboardMarkup(row_width=5)
     list_of_buttons = []
     key = callback.data.split(',')[-1]
-    data = get_callback_by_id(key).split(',')[1:]
+    current_stop = get_callback_by_id(key)
     routs = set()
-    for id in data:
+    for id in current_stop.stop_id.split('-'):
         resp = requests.post('https://oskemenbus.kz/api/GetStopRouts', json={"StopId": id})
         for row in resp.text.split('\n')[:-1]:
             row = json.loads(row)
             number = row.get('result').get('Number')
             routs.add(number)
-            if len(list_of_buttons) == 0:
-                callback_data = get_callback_by_id(callback.data.split(',')[-1])
-                key = generate_callback(callback_data+','+number)
-                list_of_buttons.append(types.InlineKeyboardButton(number, callback_data=key))
-            elif number not in [x.text for x in list_of_buttons]:
-                key = generate_callback(callback_data + ',' + number)
+            if (len(list_of_buttons) == 0) or (number not in [x.text for x in list_of_buttons]):
+                key = generate_callback(name=current_stop.name,
+                                        stop_id=current_stop.stop_id,
+                                        bus_number=number)
                 list_of_buttons.append(types.InlineKeyboardButton(number, callback_data=key))
     markup.add(*list_of_buttons)
     bot.send_message(callback.message.chat.id, message_choose_number_of_vehicle, reply_markup=markup)
@@ -157,16 +161,19 @@ def choose_vehicle(callback):
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_number_of_vehicle)
 def choose_day(callback):
     markup = types.InlineKeyboardMarkup()
-    data = get_callback_by_id(callback.data)
+    current_data = get_callback_by_id(callback.data)
     for day, name in DAYS.items():
-        key = generate_callback(data+','+day)
+        key = generate_callback(name=current_data.name,
+                                stop_id=current_data.stop_id,
+                                bus_number=current_data.bus_number,
+                                day=day)
         markup.add(types.InlineKeyboardButton(f"{name}", callback_data=key))
     bot.send_message(callback.message.chat.id, message_choose_day_of_week, reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_day_of_week)
 def choose_time(callback):
-    data = get_callback_by_id(callback.data)
+    # data = get_callback_by_id(callback.data)
     bot.send_message(callback.message.chat.id, message_set_time,)
     bot.register_next_step_handler(callback.message, callback=check_time, call=callback)
 
@@ -186,28 +193,25 @@ def check_time(message, call):
     choose_time(call)
 
 
-
 @bot.callback_query_handler(func=lambda callback: callback.message.text ==
                                                   (message_choose_busstop or message_choose_tramstop) or
                                                   callback.message.reply_markup.keyboard[1][0].text == 'Обновить')
 def get_vehicle(callback):
-    data = get_callback_by_id(callback.data)
-    name = data.split(',')[0]
-    id = data.split(',')[1:]
+    current_busstop = get_callback_by_id(callback.data)
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
     markup.add(types.InlineKeyboardButton('Установить уведомление', callback_data='notice,'+callback.data))
     markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     markup.add(btn1, btn2)
-    list_of_buses = get_scoreboard(id)
+    list_of_buses = get_scoreboard(current_busstop.stop_id.split('-'))
     if len(list_of_buses) == 0:
-        bot.send_message(callback.message.chat.id, f'На остановке {name} нет ни одного автобуса/трамвая',
-                         reply_markup=markup)
+        bot.send_message(callback.message.chat.id, f'На остановке {current_busstop.name} '
+                                                   f'нет ни одного автобуса/трамвая', reply_markup=markup)
         return
 
     list_of_buses.sort(key=sort_function)
-    result = f'Остановка: {name}\n\nНомер (направление) время \n\n'
+    result = f'Остановка: {current_busstop.name}\n\nНомер (направление) время \n\n'
     for elem in list_of_buses:
         result += f' {elem[0]}   ({elem[1]})   {elem[2]}\n'
     bot.send_message(callback.message.chat.id, result, reply_markup=markup)
