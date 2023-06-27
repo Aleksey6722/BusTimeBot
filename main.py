@@ -1,6 +1,7 @@
 import telebot
 from telebot import types
 import requests
+from sqlalchemy import or_
 
 import json
 import os
@@ -43,7 +44,8 @@ def sort_function(elem):
     return int(elem[0][:-1])
 
 
-def get_scoreboard(ids):
+def get_scoreboard(data):
+    ids = data.split('-')
     a_list = []
     for elem in ids:
         resp = requests.post('https://oskemenbus.kz/api/GetScoreboard', json={"StopId": elem})
@@ -158,6 +160,7 @@ def choose_vehicle(callback):
     bot.send_message(callback.message.chat.id, message_choose_number_of_vehicle, reply_markup=markup)
     print(markup.keyboard)
 
+
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_number_of_vehicle)
 def choose_day(callback):
     markup = types.InlineKeyboardMarkup()
@@ -175,24 +178,31 @@ def choose_day(callback):
 def choose_time(callback):
     # data = get_callback_by_id(callback.data)
     bot.send_message(callback.message.chat.id, message_set_time,)
-    bot.register_next_step_handler(callback.message, callback=check_time, call=callback)
+    bot.register_next_step_handler(callback.message, callback=set_time, call=callback)
 
 
 re_time = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
 
 
-def check_time(message, call):
+def set_time(message, call):
     data = get_callback_by_id(call.data)
     if re.fullmatch(re_time, message.text):
         notice_time = datetime.strptime(message.text, '%H:%M').time()
-        print(notice_time)
-        notice = Notice(username=message.chat.first_name,
-                        chat_id=message.chat.id,
-                        stop_id=data.stop_id,
-                        stop_name=data.name,
-                        bus_number=data.bus_number,
-                        day=data.day,
-                        notice_time=notice_time)
+        params = {
+            'username': message.chat.first_name,
+            'chat_id': message.chat.id,
+            'stop_id': data.stop_id,
+            'stop_name': data.name,
+            'bus_number': data.bus_number,
+            'day': data.day,
+            'notice_time': notice_time
+        }
+        check = session.query(Notice).filter_by(**params).first()
+        if check:
+            bot.send_message(message.chat.id, 'Такое уведомление уже существует! Для управления уведомлениями '
+                                              'введите команду /my_notice')
+            return
+        notice = Notice(**params)
         session.add(notice)
         session.commit()
         bot.send_message(message.chat.id, 'Уведомление создано! Для управления уведомлениями '
@@ -213,7 +223,7 @@ def get_vehicle(callback):
     markup.add(types.InlineKeyboardButton('Установить уведомление', callback_data='notice,'+callback.data))
     markup.add(types.InlineKeyboardButton('Обновить', callback_data=callback.data))
     markup.add(btn1, btn2)
-    list_of_buses = get_scoreboard(current_busstop.stop_id.split('-'))
+    list_of_buses = get_scoreboard(current_busstop.stop_id)
     if len(list_of_buses) == 0:
         bot.send_message(callback.message.chat.id, f'На остановке {current_busstop.name} '
                                                    f'нет ни одного автобуса/трамвая', reply_markup=markup)
@@ -227,14 +237,27 @@ def get_vehicle(callback):
 
 
 def check_notify():
-    c = 0
     while True:
-        time.sleep(30)
-        print(c)
-        c += 1
+        today = datetime.today().strftime('%A')
+        nowtime = datetime.today().strftime('%H:%M')
+        # g = datetime.strptime('6:00', '%H:%M').time()
+        notices = session.query(Notice).filter(or_(Notice.day == 'Everyday',
+                                                  Notice.day == today)).filter(Notice.notice_time == nowtime).all()
+        if notices:
+            for a_notice in notices:
+                bus_info = get_scoreboard(a_notice.stop_id)
+                a_list = [x for x in bus_info if x[0] == a_notice.bus_number]
+                if not a_list:
+                    bot.send_message(notice.chat_id, f'Уведомление!\n\nОстановка: {a_notice.stop_name}\n\n'
+                                                     f'Автобус {a_notice.bus_number} в данный момент не на маршруте')
+                message_text = ''
+                for bus in a_list:
+                    message_text += f' {bus[0]}   ({bus[1]})   {bus[2]}\n'
+                bot.send_message(a_notice.chat_id, f'Уведомление!\n\nОстановка: {a_notice.stop_name}\n\n'
+                                                 f'Номер (направление) время \n\n'+message_text)
+        time.sleep(60)
         print(datetime.today().strftime('%A'))
         print(datetime.today().strftime('%H:%M'))
-
 
 notifier = Thread(target=check_notify)
 notifier.start()

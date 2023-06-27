@@ -38,13 +38,14 @@ class Button(Base):
 class Notice(Base):
     __tablename__ = 'notice'
     id = Column(Integer, primary_key=True)
-    username = Column(String(64), nullable=False)
+    username = Column(String(64), nullable=True)
     chat_id = Column(Integer, nullable=False)
     stop_id = Column(String(256), nullable=False)
     stop_name = Column(String(64), nullable=False)
     bus_number = Column(String(64), nullable=False)
     day = Column(String(10), nullable=True)
     notice_time = Column(Time())
+
 
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
