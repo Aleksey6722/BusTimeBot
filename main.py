@@ -10,7 +10,7 @@ from threading import Thread
 import uuid
 import re
 
-from models import session, Region, TramStop, Button
+from models import session, Region, TramStop, Button, Notice
 
 TOKEN = os.getenv('TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -182,10 +182,19 @@ re_time = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
 
 
 def check_time(message, call):
-    text = message.text
     data = get_callback_by_id(call.data)
-    if re.fullmatch(re_time, text):
-        # создание записи в БД
+    if re.fullmatch(re_time, message.text):
+        notice_time = datetime.strptime(message.text, '%H:%M').time()
+        print(notice_time)
+        notice = Notice(username=message.chat.first_name,
+                        chat_id=message.chat.id,
+                        stop_id=data.stop_id,
+                        stop_name=data.name,
+                        bus_number=data.bus_number,
+                        day=data.day,
+                        notice_time=notice_time)
+        session.add(notice)
+        session.commit()
         bot.send_message(message.chat.id, 'Уведомление создано! Для управления уведомлениями '
                                        'введите команду /my_notice')
         return

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger, func, DateTime
+from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger, func, DateTime, Time
 from sqlalchemy.orm import Session, declarative_base
 import time
 
@@ -34,6 +34,17 @@ class Button(Base):
     day = Column(String(10), nullable=True)
     date = Column(DateTime(), server_default=func.now())
 
+
+class Notice(Base):
+    __tablename__ = 'notice'
+    id = Column(Integer, primary_key=True)
+    username = Column(String(64), nullable=False)
+    chat_id = Column(Integer, nullable=False)
+    stop_id = Column(String(256), nullable=False)
+    stop_name = Column(String(64), nullable=False)
+    bus_number = Column(String(64), nullable=False)
+    day = Column(String(10), nullable=True)
+    notice_time = Column(Time())
 
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
