@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger, func, DateTime, Time
 from sqlalchemy.orm import Session, declarative_base
-import time
 
 
 engine = create_engine("postgresql+psycopg2://postgres:sql123@localhost/busbot")
@@ -31,6 +30,7 @@ class Button(Base):
     name = Column(String(64), nullable=False)
     stop_id = Column(String(256), nullable=False)
     bus_number = Column(String(64), nullable=True)
+    type = Column(String(10), nullable=True)
     day = Column(String(10), nullable=True)
     date = Column(DateTime(), server_default=func.now())
 
@@ -43,6 +43,7 @@ class Notice(Base):
     stop_id = Column(String(256), nullable=False)
     stop_name = Column(String(64), nullable=False)
     bus_number = Column(String(64), nullable=False)
+    type = Column(String(10), nullable=True)
     day = Column(String(10), nullable=True)
     notice_time = Column(Time())
 
