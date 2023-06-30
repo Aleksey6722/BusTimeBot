@@ -35,7 +35,7 @@ def sum_duplicates(sorted_list):
             continue
         a_list.append(item)
         i += 1
-    return list(map(lambda x: ','.join(x), a_list))
+    return list(map(lambda x: ';'.join(x), a_list))
 
 
 def sort_function(elem):
@@ -113,9 +113,11 @@ def delete_notice(callback):
 @bot.callback_query_handler(func=lambda callback: callback.data == 'bus_region')
 def bus_regions(callback):
     data = session.query(Region).all()
-    markup = types.InlineKeyboardMarkup()
+    list_of_buttons = []
+    markup = types.InlineKeyboardMarkup(row_width=2)
     for elem in data:
-        markup.add(types.InlineKeyboardButton(elem.name, callback_data=elem.name))
+        list_of_buttons.append(types.InlineKeyboardButton(elem.name, callback_data=elem.name))
+    markup.add(*list_of_buttons)
     bot.send_message(callback.message.chat.id, message_choose_region, reply_markup=markup)
 
 
@@ -126,13 +128,15 @@ def tram(callback):
     for elem in data:
         a_list.append([elem.name.strip(), str(elem.id)])
     stop_list = sum_duplicates(a_list)
-    markup = types.InlineKeyboardMarkup()
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    list_of_buttons = []
     for item in stop_list:
-        name = item.split(',')[0]
-        stop_id = item.split(',')[1]
-        markup.add(types.InlineKeyboardButton(name, callback_data=generate_callback(name=name,
+        name = item.split(';')[0]
+        stop_id = item.split(';')[1]
+        list_of_buttons.append(types.InlineKeyboardButton(name, callback_data=generate_callback(name=name,
                                                                                     type='Трамвай',
                                                                                     stop_id=stop_id)))
+    markup.add(*list_of_buttons)
     bot.send_message(callback.message.chat.id, message_choose_tramstop, reply_markup=markup)
 
 
@@ -150,15 +154,15 @@ def get_busstops(callback):
         obj = json.loads(row)
         name = obj.get('result').get('StopName')
         stop_id = obj.get('result').get('StopId')
-        if stop_id not in tram_stops_id:
+        if int(stop_id) not in tram_stops_id:
             a_list.append([name.strip(), stop_id])
 
     a_list.sort(key=lambda x: x[0])
     stops_list = sum_duplicates(a_list)
     markup = types.InlineKeyboardMarkup()
     for item in stops_list:
-        name = item.split(',')[0]
-        stop_id = item.split(',')[1]
+        name = item.split(';')[0]
+        stop_id = item.split(';')[1]
         markup.add(types.InlineKeyboardButton(name, callback_data=generate_callback(name=name,
                                                                                     type='Автобус',
                                                                                     stop_id=stop_id)))
@@ -254,7 +258,7 @@ def get_vehicle(callback):
     markup.add(btn1, btn2)
     list_of_buses = get_scoreboard(current_stop.stop_id)
     if len(list_of_buses) == 0:
-        bot.send_message(callback.message.chat.id, f'На остановке {current_stop.name} в данный момент '
+        bot.send_message(callback.message.chat.id, f'На остановке "{current_stop.name}" в данный момент '
                                                    f'нет ни одного автобуса/трамвая', reply_markup=markup)
         return
 
