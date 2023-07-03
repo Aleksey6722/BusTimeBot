@@ -106,6 +106,7 @@ def check_notice(message):
 @bot.callback_query_handler(func=lambda callback: callback.message.reply_markup.keyboard[0][0].text == 'Удалить')
 def delete_notice(callback):
     session.query(Notice).filter(Notice.id == callback.data).delete()
+    session.commit()
     bot.send_message(callback.message.chat.id, 'Уведомление удалено!')
     check_notice(callback.message)
 
@@ -291,8 +292,6 @@ def notify():
                                                        f'Остановка: {a_notice.stop_name}\n\n'
                                                        f'{a_notice.type} (направление) время \n\n'+message_text)
         time.sleep(60)
-        print(datetime.today().strftime('%A'))
-        print(datetime.today().strftime('%H:%M'))
 
 
 notifier = Thread(target=notify)

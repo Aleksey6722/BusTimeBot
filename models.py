@@ -1,8 +1,10 @@
 from sqlalchemy import create_engine, String, Integer, Float, Column, BigInteger, func, DateTime, Time
 from sqlalchemy.orm import Session, declarative_base
+import os
 
-
-engine = create_engine("postgresql+psycopg2://postgres:sql123@localhost/busbot")
+USER = os.getenv('USER')
+PASSWORD = os.getenv('PASSWORD')
+engine = create_engine(f"postgresql+psycopg2://{USER}:{PASSWORD}@localhost/busbot")
 session = Session(bind=engine)
 Base = declarative_base()
 
