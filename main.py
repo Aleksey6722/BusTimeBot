@@ -271,10 +271,11 @@ def get_vehicle(callback):
 
 def notify():
     while True:
-        today = datetime.today().strftime('%A')
+        # today = datetime.today().strftime('%A')
         # nowtime = datetime.today().strftime('%H:%M')
-        t = datetime.now() + timedelta(hours=6)
-        nowtime = t.strftime('%H:%M')
+        offset_time = datetime.now() + timedelta(hours=6)
+        today = offset_time.strftime('%A')
+        nowtime = offset_time.strftime('%H:%M')
         notices = session.query(Notice).filter(or_(Notice.day == 'Everyday',
                                                Notice.day == today)).filter(Notice.notice_time == nowtime).all()
         if notices:
