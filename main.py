@@ -6,7 +6,7 @@ from sqlalchemy import or_
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Thread
 import uuid
 import re
@@ -272,7 +272,9 @@ def get_vehicle(callback):
 def notify():
     while True:
         today = datetime.today().strftime('%A')
-        nowtime = datetime.today().strftime('%H:%M')
+        # nowtime = datetime.today().strftime('%H:%M')
+        t = datetime.now() + timedelta(hours=6)
+        nowtime = t.strftime('%H:%M')
         notices = session.query(Notice).filter(or_(Notice.day == 'Everyday',
                                                Notice.day == today)).filter(Notice.notice_time == nowtime).all()
         if notices:
