@@ -191,7 +191,6 @@ def choose_vehicle(callback):
                 list_of_buttons.append(types.InlineKeyboardButton(number, callback_data=key))
     markup.add(*list_of_buttons)
     bot.send_message(callback.message.chat.id, message_choose_number_of_vehicle, reply_markup=markup)
-    print(markup.keyboard)
 
 
 @bot.callback_query_handler(func=lambda callback: callback.message.text == message_choose_number_of_vehicle)
