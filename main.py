@@ -12,7 +12,6 @@ import uuid
 import re
 
 from models import session, Region, TramStop, Button, Notice
-
 TOKEN = os.getenv('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 message_choose_transport = 'Выберите транспорт'
@@ -80,6 +79,10 @@ def get_callback_by_id(key):
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    # tm = message.date
+    # ut = datetime.utcfromtimestamp(tm).strftime('%H:%M')
+    # g = datetime.fromtimestamp(tm)
+    # utc_offset = datetime.fromtimestamp(tm) - datetime.utcfromtimestamp(tm)
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton('Автобусы', callback_data='bus_region')
     btn2 = types.InlineKeyboardButton('Трамваи', callback_data='trams')
