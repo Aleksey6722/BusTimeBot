@@ -11,7 +11,10 @@ from threading import Thread
 import uuid
 import re
 
+
 from models import session, Region, TramStop, Button, Notice
+
+
 TOKEN = os.getenv('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 message_choose_transport = 'Выберите транспорт'
@@ -21,9 +24,12 @@ message_choose_region = 'Выберите район'
 message_choose_day_of_week = 'Выберите день недели'
 message_choose_number_of_vehicle = 'Выберите номер транспорта'
 message_set_time = 'Введите время уведомления в 24-х часовом формате ЧЧ:ММ'
+message_empty_busstop = 'Установка уведомлений недоступна, транспорт временно отсутствует. Повторите позже'
+message_set_new_day = 'Время установлено! Выберите новый день недели'
 DAYS = {'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда', 'Thursday': 'Четверг',
         'Friday': 'Пятница', 'Saturday': 'Суббота', 'Sunday': 'Воскресенье', 'Everyday': 'Каждый день'}
 
+re_time = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
 
 def sum_duplicates(sorted_list):
     a_list = []
@@ -98,21 +104,55 @@ def check_notice(message):
             markup = types.InlineKeyboardMarkup()
             text = f'Остановка: {a_notice.stop_name}\n{a_notice.type}: {a_notice.bus_number}\n' \
                    f'День: {DAYS.get(a_notice.day)}\nВремя: {a_notice.notice_time}'
-            btn = types.InlineKeyboardButton('Удалить', callback_data=a_notice.id)
-            markup.add(btn)
+            del_btn = types.InlineKeyboardButton('Удалить', callback_data='del,'+str(a_notice.id))
+            edit_dtn = types.InlineKeyboardButton('Редактировать', callback_data='edit,'+str(a_notice.id))
+            markup.add(del_btn, edit_dtn)
             bot.send_message(message.chat.id, text, reply_markup=markup)
     else:
         bot.send_message(message.chat.id, 'У Вас нет ни одного уведомления. Введите команду /start, '
                                           'чтобы начать работу с ботом')
 
 
-@bot.callback_query_handler(func=lambda callback: callback.message.reply_markup.keyboard[0][0].text == 'Удалить')
+@bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] == 'del')
 def delete_notice(callback):
-    session.query(Notice).filter(Notice.id == callback.data).delete()
+    session.query(Notice).filter(Notice.id == callback.data.split(',')[1]).delete()
     session.commit()
     bot.send_message(callback.message.chat.id, 'Уведомление удалено!')
-    check_notice(callback.message)
 
+
+@bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] == 'edit')
+def edit_notice(callback):
+    bot.send_message(callback.message.chat.id, message_set_time)
+    bot.register_next_step_handler(callback.message, callback=set_new_time, call=callback)
+
+
+def set_new_time(message, call):
+    if re.fullmatch(re_time, message.text):
+        notice_id = call.data.split(',')[1]
+        new_time = datetime.strptime(message.text, '%H:%M').time()
+        notice = session.query(Notice).filter(Notice.id == notice_id).first()
+        notice.notice_time = new_time
+        session.add(notice)
+        session.commit()
+        markup = types.InlineKeyboardMarkup()
+        for day, name in DAYS.items():
+            markup.add(types.InlineKeyboardButton(f"{name}", callback_data=notice_id+','+day))
+        bot.send_message(message.chat.id, message_set_new_day, reply_markup=markup)
+
+        return
+    bot.send_message(message.chat.id, 'Некорректное время')
+    edit_notice(call)
+
+
+@bot.callback_query_handler(func=lambda callback: callback.message.text == message_set_new_day)
+def set_new_day(callback):
+    notice_id = callback.data.split(',')[0]
+    new_day = callback.data.split(',')[1]
+    notice = session.query(Notice).filter(Notice.id == notice_id).first()
+    notice.day = new_day
+    session.add(notice)
+    session.commit()
+    bot.send_message(callback.message.chat.id, 'Новый день недели установлен. Уведомление отредактированно!')
 
 @bot.callback_query_handler(func=lambda callback: callback.data == 'bus_region')
 def bus_regions(callback):
@@ -182,6 +222,9 @@ def choose_vehicle(callback):
     routs = set()
     for id in current_stop.stop_id.split('-'):
         resp = requests.post('https://oskemenbus.kz/api/GetStopRouts', json={"StopId": id})
+        if len(resp.content) == 0:
+            bot.send_message(callback.message.chat.id, message_empty_busstop, reply_markup=markup)
+            return
         for row in resp.text.split('\n')[:-1]:
             row = json.loads(row)
             number = row.get('result').get('Number')
@@ -214,9 +257,6 @@ def choose_day(callback):
 def choose_time(callback):
     bot.send_message(callback.message.chat.id, message_set_time,)
     bot.register_next_step_handler(callback.message, callback=set_time, call=callback)
-
-
-re_time = re.compile(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$')
 
 
 def set_time(message, call):
