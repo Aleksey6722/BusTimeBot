@@ -122,6 +122,8 @@ def delete_notice(callback):
 
 @bot.callback_query_handler(func=lambda callback: callback.data.split(',')[0] == 'edit')
 def edit_notice(callback):
+    if not session.query(Notice).filter(Notice.id == callback.data.split(',')[1]).first():
+        return
     bot.send_message(callback.message.chat.id, message_set_time)
     bot.register_next_step_handler(callback.message, callback=set_new_time, call=callback)
 
@@ -153,6 +155,7 @@ def set_new_day(callback):
     session.add(notice)
     session.commit()
     bot.send_message(callback.message.chat.id, 'Новый день недели установлен. Уведомление отредактированно!')
+
 
 @bot.callback_query_handler(func=lambda callback: callback.data == 'bus_region')
 def bus_regions(callback):
